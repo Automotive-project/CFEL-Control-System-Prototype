@@ -12,7 +12,7 @@ class Application(tk.Frame):
         # Variables of control system.
         self.devices_type = ["Camera", "Motor"]
         self.devices_name = ["PointGrey", "Dummy_motor"]
-        self.added_devices = ["PointGrey", "Dummy_motor"]
+        self.added_devices = []
         self.attributes = ["Exposure Time", "Aperture", "Speed", "Step"]
         self.scan_entries = []
         self.device_entries = []
@@ -23,7 +23,7 @@ class Application(tk.Frame):
 
         # Tests
         # raw_input("aaa")
-        # self.update_menu(self.scannable_device_menu, self.selected_scannable_device, ["a", "b", "c", "d"])
+        # self.update_menu(self.scannable_device_menu, self.selected_scannable_device, self.added_devices)
 
     def configure_master(self):
         # Set window title.
@@ -33,8 +33,8 @@ class Application(tk.Frame):
         self.master.protocol("WM_DELETE_WINDOW", self.quit)
 
         # Place window at the center of the screen.
-        w = 500 # Width for the Tk root.
-        h = 300 # Height for the Tk root.
+        w = 800 # Width for the Tk root.
+        h = 600 # Height for the Tk root.
         ws = self.master.winfo_screenwidth() # Width of the screen.
         hs = self.master.winfo_screenheight() # Height of the screen.
         x = (ws/2) - (w/2)
@@ -49,10 +49,13 @@ class Application(tk.Frame):
     """Widget helper methods."""
     def update_menu(self, menu, variable, choices):
         """Update choices of OptionMenu."""
-        variable.set('-')
+        variable.set("-")
         menu["menu"].delete(0, "end")
-        for choice in choices:
-            menu["menu"].add_command(label=choice, command=tk._setit(variable, choice))
+        if choices:
+            for choice in choices:
+                menu["menu"].add_command(label=choice, command=tk._setit(variable, choice))
+        else:
+            menu["menu"].add_command(label="-", command=tk._setit(variable, "-"))
 
     def open_log_setting(self):
         # TODO.
@@ -71,6 +74,10 @@ class Application(tk.Frame):
         pass
 
     def stop_scan(self):
+        # TODO.
+        pass
+
+    def on_scannable_device_change(self, device):
         # TODO.
         pass
 
@@ -94,6 +101,7 @@ class Application(tk.Frame):
         self.device_entries.append(device)
         device.grid(row=0, column=len(self.device_entries), sticky=(N, S), padx=5)
         self.added_devices.append(device_name)
+        self.update_menu(self.scannable_device_menu, self.selected_scannable_device, self.added_devices)
 
     def create_widgets(self):
         """Widget."""
@@ -115,17 +123,15 @@ class Application(tk.Frame):
         self.scan_frame = tk.LabelFrame(self, text="Scan")
         self.scan_start_btn = tk.Button(self.scan_frame, text="Start", fg="white", bg="blue", command=self.start_scan)
         self.scan_stop_btn = tk.Button(self.scan_frame, text="Stop", fg="white", bg="red", command=self.stop_scan)
-        self.selected_scannable_device = tk.StringVar(self.scan_frame)
-        self.selected_scannable_device.set("-")
-        self.scannable_device_menu = tk.OptionMenu(self.scan_frame, self.selected_scannable_device, *self.added_devices)
-        self.selected_scannable_attr = tk.StringVar(self.scan_frame)
-        self.selected_scannable_attr.set("-")
-        self.scannable_attr_menu = tk.OptionMenu(self.scan_frame, self.selected_scannable_attr, *self.attributes)
+        self.selected_scannable_device = tk.StringVar(self.scan_frame, "-")
+        self.scannable_device_menu = tk.OptionMenu(self.scan_frame, self.selected_scannable_device, "-", command=self.on_scannable_device_change)
+        # TODO: update |scannable_attr_menu| after |scannable_device_menu| changed.
+        self.selected_scannable_attr = tk.StringVar(self.scan_frame, "-")
+        self.scannable_attr_menu = tk.OptionMenu(self.scan_frame, self.selected_scannable_attr, "-")
         self.add_scan_btn = tk.Button(self.scan_frame, text="Add", command=self.add_scan)
         # Device.
         self.device_frame = tk.LabelFrame(self, text="Device")
-        self.selected_device = tk.StringVar(self.device_frame)
-        self.selected_device.set("-")
+        self.selected_device = tk.StringVar(self.device_frame, "-")
         self.device_menu = tk.OptionMenu(self.device_frame, self.selected_device, *self.devices_name)
         self.add_device_btn = tk.Button(self.device_frame, text="Add", command=self.add_device)
         self.device_workspace_frame = tk.Frame(self.device_frame)
