@@ -1,2 +1,6 @@
+# Experiment images
 *.raw
 *.edf
+
+# Python
+*.pyc
