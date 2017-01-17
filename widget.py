@@ -52,11 +52,11 @@ class DeviceBase(tk.Frame):
 
         """Grid."""
         # Header.
-        self.header_frame.grid(row=0, column=0, sticky=(E, W), padx=(5,5), pady=(0,5))
+        self.header_frame.grid(row=0, column=0, sticky=(E, W), padx=(5,5), pady=(5,5))
         self.device_label.grid(row=0, column=0, sticky=(E, W))
         self.expert_chkbtn.grid(row=0, column=1)
         # Body.
-        self.common_attr_frame.grid(row=1, column=0, sticky=(N, S, E, W), padx=(5,5), pady=(0,5))
+        self.common_attr_frame.grid(row=1, column=0, sticky=(N, S, E, W), padx=(5,5))
         for idx, attr in enumerate(self.common_attr):
             attr.name_widget.grid(row=idx, column=0, sticky=(W), padx=(0,5))
             attr.value_widget.grid(row=idx, column=1, sticky=(E, W))
@@ -70,7 +70,6 @@ class DeviceBase(tk.Frame):
 
         """Grid config."""
         # Main.
-        self.rowconfigure(1, weight=1)
         self.rowconfigure(2, weight=1)
         self.columnconfigure(0, weight=1)
         # Header.
