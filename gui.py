@@ -14,8 +14,6 @@ class Application(tk.Frame):
         self.devices_name = ["PointGrey", "Dummy_motor"]
         self.added_devices = []
         self.attributes = ["Exposure Time", "Aperture", "Speed", "Step"]
-        self.scan_entries = []
-        self.device_entries = []
 
         # Render the layout.
         self.configure_master()
@@ -87,21 +85,24 @@ class Application(tk.Frame):
         # Avoid unspecified device or attr.
         if device == "-" or attr == "-":
             return
-        entry = widget.ScanEntry(self.scan_frame, device, attr)
-        self.scan_entries.append(entry)
-        entry.grid(row=len(self.scan_entries)+1, column=0, columnspan=3, sticky=(E, W), padx=11, pady=3)
+        entry = widget.ScanEntry(self.scan_workspace_frame, device, attr)
+        entry.grid(row=len(self.scan_workspace_frame.children), column=0, sticky=(E, W), pady=3)
 
     def add_device(self):
         device_name = self.selected_device.get()
         # Avoid unspecified device.
         if device_name == "-":
             return
+        # TODO: remove device from |devices_name| after being added.
+        # TODO: maintain order of |devices_name|.
+        # TODO: maintain |added_devices| and |devices_name| in device.on_destroy
         device_type = self.devices_type[self.devices_name.index(device_name)]
         device = getattr(widget, device_type + "Device")(self.device_workspace_frame, device_name)
-        self.device_entries.append(device)
-        device.grid(row=0, column=len(self.device_entries), sticky=(N, S), padx=5)
+        device.grid(row=0, column=len(self.device_workspace_frame.children), sticky=(N, S), padx=5)
         self.added_devices.append(device_name)
         self.update_menu(self.scannable_device_menu, self.selected_scannable_device, self.added_devices)
+        print(len(self.added_devices))
+        print(self.device_workspace_frame.children)
 
     def create_widgets(self):
         """Widget."""
@@ -129,6 +130,7 @@ class Application(tk.Frame):
         self.selected_scannable_attr = tk.StringVar(self.scan_frame, "-")
         self.scannable_attr_menu = tk.OptionMenu(self.scan_frame, self.selected_scannable_attr, "-")
         self.add_scan_btn = tk.Button(self.scan_frame, text="Add", command=self.add_scan)
+        self.scan_workspace_frame = tk.Frame(self.scan_frame)
         # Device.
         self.device_frame = tk.LabelFrame(self, text="Device")
         self.selected_device = tk.StringVar(self.device_frame, "-")
@@ -137,16 +139,16 @@ class Application(tk.Frame):
         self.device_workspace_frame = tk.Frame(self.device_frame)
 
         """Grid."""
-        # Main.
-        self.scan_frame.grid(row=0, column=0, sticky=(N, S, E, W), padx=10, pady=10)
-        self.device_frame.grid(row=1, column=0, sticky=(N, S, E, W), padx=10, pady=10)
         # Scan.
+        self.scan_frame.grid(row=0, column=0, sticky=(N, S, E, W), padx=10, pady=10)
         self.scan_start_btn.grid(row=0, column=0, columnspan=2, sticky=(E, W), padx=(10,5))
         self.scan_stop_btn.grid(row=0, column=2, sticky=(E, W), padx=(5,10))
         self.scannable_device_menu.grid(row=1, column=0, sticky=(E, W), padx=(7,0))
         self.scannable_attr_menu.grid(row=1, column=1, sticky=(E, W), padx=(3,4))
         self.add_scan_btn.grid(row=1, column=2, sticky=(E, W), padx=(5,10))
+        self.scan_workspace_frame.grid(row=2, column=0, columnspan=3, sticky=(N, S, E, W), padx=11)
         # Device.
+        self.device_frame.grid(row=1, column=0, sticky=(N, S, E, W), padx=10, pady=10)
         self.device_menu.grid(row=0, column=0, sticky=(E, W), padx=(7,0))
         self.add_device_btn.grid(row=0, column=1, sticky=(E, W), padx=(9,10))
         self.device_workspace_frame.grid(row=1, column=0, columnspan=2, sticky=(N, S, E, W), padx=10, pady=(3,8))
@@ -160,6 +162,7 @@ class Application(tk.Frame):
         self.scan_frame.columnconfigure(0, weight=3)
         self.scan_frame.columnconfigure(1, weight=3)
         self.scan_frame.columnconfigure(2, weight=1)
+        self.scan_workspace_frame.columnconfigure(0, weight=1)
         # Device.
         self.device_frame.rowconfigure(1, weight=1)
         self.device_frame.columnconfigure(0, weight=4)
