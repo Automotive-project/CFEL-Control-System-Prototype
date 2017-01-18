@@ -104,7 +104,7 @@ class ScanEntry(tk.Frame):
         # Device and attributes.
         self.device_attr_label = tk.Label(self, text=device + "::" + attr)
         # Start, end, step.
-        entry_width = 5
+        entry_width = 15
         self.start_entry = tk.Entry(self, fg="grey", width=entry_width)
         self.start_entry.insert(0, "start")
         self.start_entry.bind("<FocusIn>", self.on_entry_focusin)
