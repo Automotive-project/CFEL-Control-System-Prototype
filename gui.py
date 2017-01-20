@@ -18,6 +18,9 @@ class Application(tk.Frame):
     it has two children. The |scan_frame| is for scanning, and the
     |device_frame| is for device.
 
+    Attributes:
+        TODO
+
     """
     def __init__(self, master):
         tk.Frame.__init__(self, master)
@@ -39,6 +42,45 @@ class Application(tk.Frame):
         # raw_input("aaa")
         # self.update_menu(self.scannable_device_menu,
                 # self.selected_scannable_device, self.added_devices)
+
+    def _add_device(self):
+        """Add device entry.
+
+        Triggered by |add_device_btn|.
+
+        """
+        device_name = self.selected_device.get()
+        # Avoid unspecified device.
+        if device_name == "-":
+            return
+        # TODO: remove device from |devices_name| after being added.
+        # TODO: maintain order of |devices_name|.
+        # TODO: maintain |added_devices| and |devices_name| in device.on_destroy
+        device_type = self.devices_type[self.devices_name.index(device_name)]
+        device = getattr(widget, device_type + "Device") \
+                (self.device_workspace_frame, device_name)
+        device.grid(row=0, column=len(self.device_workspace_frame.children),
+                    sticky=(N, S), padx=5)
+        self.added_devices.append(device_name)
+        self._update_menu(self.scannable_device_menu,
+                          self.selected_scannable_device, self.added_devices)
+        print len(self.added_devices)
+        print self.device_workspace_frame.children
+
+    def _add_scan(self):
+        """Add scan entry.
+
+        Triggered by |add_scan_btn|.
+
+        """
+        device = self.selected_scannable_device.get()
+        attr = self.selected_scannable_attr.get()
+        # Avoid unspecified device or attr.
+        if device == "-" or attr == "-":
+            return
+        entry = widget.ScanEntry(self.scan_workspace_frame, device, attr)
+        entry.grid(row=len(self.scan_workspace_frame.children), column=0,
+                   sticky=(E, W), pady=3)
 
     def _configure_master(self):
         """Configure the root container.
@@ -65,89 +107,6 @@ class Application(tk.Frame):
         self.master.rowconfigure(0, weight=1)
         self.master.columnconfigure(0, weight=1)
         self.grid(row=0, column=0, sticky=(N, S, E, W))
-
-    @staticmethod
-    def _update_menu(menu, variable, choices):
-        """Update choices of OptionMenu."""
-        # TODO: other way to update menu without private method |_setit|.
-        variable.set("-")
-        menu["menu"].delete(0, "end")
-        if choices:
-            for choice in choices:
-                menu["menu"].add_command(label=choice,
-                                         command=tk._setit(variable, choice))
-        else:
-            menu["menu"].add_command(label="-",
-                                     command=tk._setit(variable, "-"))
-
-    def _open_log_setting(self):
-        """Open log setting menu."""
-        # TODO.
-        log_setting_win = tk.Toplevel(self.master)
-
-    def _open_tutorial(self):
-        """Open tutorial menu."""
-        # TODO.
-        tutorial_win = tk.Toplevel(self.master)
-
-    def _open_about(self):
-        """Open about menu."""
-        # TODO.
-        about_win = tk.Toplevel(self.master)
-
-    def _start_scan(self):
-        """Start scanning."""
-        # TODO.
-        pass
-
-    def _stop_scan(self):
-        """Stop scanning."""
-        # TODO.
-        pass
-
-    def _on_scannable_device_change(self, device):
-        """On |scannable_device_menu| change."""
-        # TODO.
-        pass
-
-    def _add_scan(self):
-        """Add scan entry.
-
-        Triggered by |add_scan_btn|.
-
-        """
-        device = self.selected_scannable_device.get()
-        attr = self.selected_scannable_attr.get()
-        # Avoid unspecified device or attr.
-        if device == "-" or attr == "-":
-            return
-        entry = widget.ScanEntry(self.scan_workspace_frame, device, attr)
-        entry.grid(row=len(self.scan_workspace_frame.children), column=0,
-                   sticky=(E, W), pady=3)
-
-    def _add_device(self):
-        """Add device entry.
-
-        Triggered by |add_device_btn|.
-
-        """
-        device_name = self.selected_device.get()
-        # Avoid unspecified device.
-        if device_name == "-":
-            return
-        # TODO: remove device from |devices_name| after being added.
-        # TODO: maintain order of |devices_name|.
-        # TODO: maintain |added_devices| and |devices_name| in device.on_destroy
-        device_type = self.devices_type[self.devices_name.index(device_name)]
-        device = getattr(widget, device_type + "Device") \
-                (self.device_workspace_frame, device_name)
-        device.grid(row=0, column=len(self.device_workspace_frame.children),
-                    sticky=(N, S), padx=5)
-        self.added_devices.append(device_name)
-        self._update_menu(self.scannable_device_menu,
-                          self.selected_scannable_device, self.added_devices)
-        print len(self.added_devices)
-        print self.device_workspace_frame.children
 
     def _create_widgets(self):
         """Create and configure all widgets."""
@@ -234,6 +193,45 @@ class Application(tk.Frame):
         self.device_frame.columnconfigure(0, weight=4)
         self.device_frame.columnconfigure(1, weight=1)
         self.device_workspace_frame.rowconfigure(0, weight=1)
+
+    def _on_scannable_device_change(self, device):
+        """On |scannable_device_menu| change."""
+        # TODO.
+        pass
+
+    def _open_about(self):
+        """Open about menu."""
+        # TODO.
+        about_win = tk.Toplevel(self.master)
+
+    def _open_log_setting(self):
+        """Open log setting menu."""
+        # TODO.
+        log_setting_win = tk.Toplevel(self.master)
+
+    def _open_tutorial(self):
+        """Open tutorial menu."""
+        # TODO.
+        tutorial_win = tk.Toplevel(self.master)
+
+    def _start_scan(self):
+        """Start scanning."""
+        # TODO.
+        pass
+
+    def _stop_scan(self):
+        """Stop scanning."""
+        # TODO.
+        pass
+
+    @staticmethod
+    def _update_menu(menu, variable, choices):
+        """Update choices of OptionMenu."""
+        variable.set("-")
+        menu["menu"].delete(0, "end")
+        for choice in choices if choices else ["-"]:
+            menu["menu"].add_command(label=choice,
+                                     command=lambda c=choice: variable.set(c))
 
 
 if __name__ == "__main__":
