@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# pylint: disable=attribute-defined-outside-init, fixme, no-self-use, too-few-public-methods, too-many-ancestors, too-many-instance-attributes, too-many-public-methods, unused-variable
+# pylint: disable=attribute-defined-outside-init, fixme, line-too-long, no-self-use, too-few-public-methods, too-many-ancestors, too-many-instance-attributes, too-many-public-methods, unused-variable
 """This module contains custom widgets for Control System GUI.
 
 Tkinter is used for GUI.
@@ -125,7 +125,7 @@ class DeviceBase(tk.Frame):
             self.other_attr_frame.grid()
 
 
-class CameraDevice(DeviceBase):
+class LimaCCDsDevice(DeviceBase):
     """Device widget of Camera.
 
     Common attributes:
@@ -133,6 +133,31 @@ class CameraDevice(DeviceBase):
 
     Other attributes:
         - Aperture: tk.Entry
+
+    ['acq_status', 'saving_next_number', 'debug_modules', 'camera_pixelsize', 'acq_mode', 'user_detector_name', 'video_roi', 'video_active', 'acc_mode', 'video_bin', 'config_available_module', 'image_height', 'concat_nb_frames', 'acc_dead_time', 'acc_offset_before', 'shared_memory_names', 'acq_expo_time', 'last_base_image_ready', 'ready_for_next_acq', 'saving_managed_mode', 'acc_live_time', 'video_last_image', 'last_counter_ready', 'acc_saturated_active', 'video_gain', 'image_type', 'last_image', 'shutter_mode', 'image_width', 'image_sizes', 'acc_time_mode', 'debug_types', 'plugin_list', 'camera_type', 'instrument_name', 'latency_time', 'acq_trigger_mode', 'acc_max_expo_time', 'image_events_push_data', 'image_events_max_rate', 'shutter_manual_state', 'debug_modules_possible', 'saving_index_format', 'acc_nb_frames', 'saving_header_delimiter', 'image_flip', 'saving_common_header', 'debug_types_possible', 'acc_saturated_cblevel', 'ready_for_next_image', 'image_rotation', 'acc_expo_time', 'acc_saturated_threshold', 'video_exposure', 'acc_threshold_before', 'image_bin', 'saving_suffix', 'saving_prefix', 'lima_type', 'acq_nb_frames', 'acq_status_fault_error', 'shared_memory_active', 'video_live', 'config_available_name', 'last_image_ready', 'saving_format', 'write_statistic', 'buffer_max_memory', 'image_roi', 'video_mode', 'video_last_image_counter', 'last_image_acquired', 'saving_frame_per_file', 'shutter_close_time', 'camera_model', 'saving_directory', 'saving_mode', 'video_source', 'last_image_saved', 'saving_overwrite_policy', 'plugin_type_list', 'valid_ranges', 'shutter_open_time', 'State', 'Status']
+
+    """
+    def __init__(self, master, name):
+        DeviceBase.__init__(self, master)
+
+        self.device_type = "Camera"
+        self.device_name = name
+        self.common_attr = [Attribute("Exposure Time", tk.Entry)]
+        self.other_attr = [Attribute("Aperture", tk.Entry)]
+
+        self._create_widgets()
+
+
+class MotorDevice(DeviceBase):
+    """Device widget of Camera.
+
+    Common attributes:
+        - Exposure time: tk.Entry
+
+    Other attributes:
+        - Aperture: tk.Entry
+
+    ['Instrument', 'SimulationMode', 'Acceleration', 'Step_per_unit', 'Velocity', 'Base_rate', 'Sign', 'Limit_switches', 'DialPosition', 'Deceleration', 'Offset', 'Position', 'Backlash', 'LowerLimitSwitch', 'UpperLimitSwitch', 'Power', 'State', 'Status']
 
     """
     def __init__(self, master, name):
@@ -242,6 +267,7 @@ class ScanEntry(tk.Frame):
 if __name__ == "__main__":
     ROOT = tk.Tk()
     ATTR = Attribute("TEST_ATTR")
-    CAMERA = CameraDevice(ROOT, "TEST_CAMERA")
+    LIMACCD = LimaCCDsDevice(ROOT, "TEST_CAMERA")
+    MOTOR = MotorDevice(ROOT, "TEST_CAMERA")
     ENTRY = ScanEntry(ROOT, "TEST_DEVICE", "TEST_ATTR")
     ROOT.destroy()

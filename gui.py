@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# pylint: disable=attribute-defined-outside-init, fixme, too-many-instance-attributes, too-many-public-methods, unused-variable
+# pylint: disable=attribute-defined-outside-init, fixme, line-too-long, too-few-public-methods, too-many-instance-attributes, too-many-public-methods, unused-variable
 """This module is the main GUI for Control System.
 
 Tkinter is used for GUI.
@@ -9,7 +9,26 @@ Tkinter is used for GUI.
 import Tkinter as tk
 from Tkinter import N, S, E, W
 
+import PyTango
+
 import widget
+
+class Tango(object):
+    """Data class. Interact with tango system."""
+    def __init__(self):
+        self._db = PyTango.Database()
+
+        self.device_classes = ["Motor", "LimaCCDs"]
+        self.devices = []
+        for class_type in self.device_classes:
+            self.devices.extend(self._db.get_device_exported_for_class(class_type).value_string)
+
+        print self.devices
+
+    def get_device_class(self, device):
+        """Return the tango class of |device|."""
+        return self._db.get_class_for_device(device)
+
 
 class Application(tk.Frame):
     """Main class for GUI.
@@ -25,14 +44,10 @@ class Application(tk.Frame):
     def __init__(self, master):
         tk.Frame.__init__(self, master)
 
-        # Variables of control system.
-        self.devices_type = ["Camera", "Camera", "Motor", "Motor"]
-        self.devices_name = ["PointGrey1",
-                             "PointGrey2",
-                             "Dummy_motor1",
-                             "Dummy_motor2"]
+        # Load data from tango.
+        self.tango = Tango()
+        self.devices_name = self.tango.devices[:]
         self.added_devices = []
-        self.attributes = ["Exposure Time", "Aperture", "Speed", "Step"]
 
         # Render the layout.
         self._configure_master()
@@ -56,8 +71,8 @@ class Application(tk.Frame):
         # TODO: remove device from |devices_name| after being added.
         # TODO: maintain order of |devices_name|.
         # TODO: maintain |added_devices| and |devices_name| in device.on_destroy
-        device_type = self.devices_type[self.devices_name.index(device_name)]
-        device = getattr(widget, device_type + "Device") \
+        device_class = self.tango.get_device_class(device_name)
+        device = getattr(widget, device_class + "Device") \
                 (self.device_workspace_frame, device_name)
         device.grid(row=0, column=len(self.device_workspace_frame.children),
                     sticky=(N, S), padx=5)
@@ -137,7 +152,6 @@ class Application(tk.Frame):
         self.scannable_device_menu = \
                 tk.OptionMenu(self.scan_frame, self.selected_scannable_device,
                               "-", command=self._on_scannable_device_change)
-        # TODO: update |scannable_attr_menu| -> |scannable_device_menu| changed.
         self.selected_scannable_attr = tk.StringVar(self.scan_frame, "-")
         self.scannable_attr_menu = tk.OptionMenu(self.scan_frame,
                                                  self.selected_scannable_attr,
@@ -196,7 +210,7 @@ class Application(tk.Frame):
 
     def _on_scannable_device_change(self, device):
         """On |scannable_device_menu| change."""
-        # TODO.
+        # TODO: update |scannable_attr_menu| -> |scannable_device_menu| changed.
         pass
 
     def _open_about(self):
