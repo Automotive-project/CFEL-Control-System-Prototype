@@ -9,25 +9,19 @@ Tkinter is used for GUI.
 import Tkinter as tk
 from Tkinter import N, S, E, W
 
-import PyTango
-
 import widget
 
 class Tango(object):
     """Data class. Interact with tango system."""
     def __init__(self):
-        self._db = PyTango.Database()
-
         self.device_classes = ["Motor", "LimaCCDs"]
-        self.devices = []
-        for class_type in self.device_classes:
-            self.devices.extend(self._db.get_device_exported_for_class(class_type).value_string)
+        self.devices = ["MotorXXX", "LimaCCDsYYY"]
 
         print self.devices
 
     def get_device_class(self, device):
         """Return the tango class of |device|."""
-        return self._db.get_class_for_device(device)
+        return self.device_classes[self.devices.index(device)]
 
 
 class Application(tk.Frame):
