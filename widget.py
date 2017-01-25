@@ -9,6 +9,8 @@ Tkinter is used for GUI.
 import Tkinter as tk
 from Tkinter import N, S, E, W
 
+import gui
+
 # TODO: Maybe a dict or a namedtuple will be a better choice?
 class Attribute(object):
     """Helper class for device attribute.
@@ -38,6 +40,15 @@ class DeviceBase(tk.Frame):
     CameraDevice, and define its own attributes at initialization followed by
     a call of _create_widgets().
 
+    Device widget is created with option name and lower-case |name| as value in
+    order to retrieve the widget reference by device name from dict
+    |device_workspace_frame.children|.
+
+    Args:
+        app: reference to main frame.
+        master: reference to parent widget.
+        name (str): device name.
+
     Attributes:
         device_type (str): type of device, eg. Camera.
         device_name (str): name of device, eg. cfeld/limaccds/poingrey
@@ -46,9 +57,11 @@ class DeviceBase(tk.Frame):
                 other attributes displayed only in expert mode.
 
     """
-    def __init__(self, master):
-        tk.Frame.__init__(self, master, borderwidth=2, relief=tk.RAISED)
+    def __init__(self, app, master, name):
+        tk.Frame.__init__(self, master, name=name.lower(), borderwidth=2,
+                          relief=tk.RAISED)
 
+        self.app = app
         self.device_type = ""
         self.device_name = ""
         self.common_attr = []
@@ -114,8 +127,8 @@ class DeviceBase(tk.Frame):
 
     def _delete(self):
         """Delete widget."""
+        self.app._remove_device(self.device_name)
         self.destroy()
-        # TODO: delete from |Application.added_devices|.
 
     def _toggle_expert(self):
         """Toggle expert mode. Bound with |expert_chkbtn|."""
@@ -137,10 +150,10 @@ class LimaCCDsDevice(DeviceBase):
     ['acq_status', 'saving_next_number', 'debug_modules', 'camera_pixelsize', 'acq_mode', 'user_detector_name', 'video_roi', 'video_active', 'acc_mode', 'video_bin', 'config_available_module', 'image_height', 'concat_nb_frames', 'acc_dead_time', 'acc_offset_before', 'shared_memory_names', 'acq_expo_time', 'last_base_image_ready', 'ready_for_next_acq', 'saving_managed_mode', 'acc_live_time', 'video_last_image', 'last_counter_ready', 'acc_saturated_active', 'video_gain', 'image_type', 'last_image', 'shutter_mode', 'image_width', 'image_sizes', 'acc_time_mode', 'debug_types', 'plugin_list', 'camera_type', 'instrument_name', 'latency_time', 'acq_trigger_mode', 'acc_max_expo_time', 'image_events_push_data', 'image_events_max_rate', 'shutter_manual_state', 'debug_modules_possible', 'saving_index_format', 'acc_nb_frames', 'saving_header_delimiter', 'image_flip', 'saving_common_header', 'debug_types_possible', 'acc_saturated_cblevel', 'ready_for_next_image', 'image_rotation', 'acc_expo_time', 'acc_saturated_threshold', 'video_exposure', 'acc_threshold_before', 'image_bin', 'saving_suffix', 'saving_prefix', 'lima_type', 'acq_nb_frames', 'acq_status_fault_error', 'shared_memory_active', 'video_live', 'config_available_name', 'last_image_ready', 'saving_format', 'write_statistic', 'buffer_max_memory', 'image_roi', 'video_mode', 'video_last_image_counter', 'last_image_acquired', 'saving_frame_per_file', 'shutter_close_time', 'camera_model', 'saving_directory', 'saving_mode', 'video_source', 'last_image_saved', 'saving_overwrite_policy', 'plugin_type_list', 'valid_ranges', 'shutter_open_time', 'State', 'Status']
 
     """
-    def __init__(self, master, name):
-        DeviceBase.__init__(self, master)
+    def __init__(self, app, master, name):
+        DeviceBase.__init__(self, app, master, name)
 
-        self.device_type = "Camera"
+        self.device_type = "LimaCCDs"
         self.device_name = name
         self.common_attr = [Attribute("Exposure Time", tk.Entry)]
         self.other_attr = [Attribute("Aperture", tk.Entry)]
@@ -160,13 +173,13 @@ class MotorDevice(DeviceBase):
     ['Instrument', 'SimulationMode', 'Acceleration', 'Step_per_unit', 'Velocity', 'Base_rate', 'Sign', 'Limit_switches', 'DialPosition', 'Deceleration', 'Offset', 'Position', 'Backlash', 'LowerLimitSwitch', 'UpperLimitSwitch', 'Power', 'State', 'Status']
 
     """
-    def __init__(self, master, name):
-        DeviceBase.__init__(self, master)
+    def __init__(self, app, master, name):
+        DeviceBase.__init__(self, app, master, name)
 
         self.device_type = "Camera"
         self.device_name = name
-        self.common_attr = [Attribute("Exposure Time", tk.Entry)]
-        self.other_attr = [Attribute("Aperture", tk.Entry)]
+        self.common_attr = [Attribute("Speed", tk.Entry)]
+        self.other_attr = [Attribute("Step size", tk.Entry)]
 
         self._create_widgets()
 
@@ -175,6 +188,11 @@ class ScanEntry(tk.Frame):
     """Scan widget for a single attribute.
 
     Args:
+        master: reference to parent widget.
+        device (str): device to be scanned.
+        attr (str): attribute to be scanned.
+
+    Attributes:
         device (str): device to be scanned.
         attr (str): attribute to be scanned.
 
@@ -182,16 +200,20 @@ class ScanEntry(tk.Frame):
     def __init__(self, master, device, attr):
         tk.Frame.__init__(self, master, borderwidth=2, relief=tk.RAISED)
 
-        self._create_widgets(device, attr)
+        self.device = device
+        self.attr = attr
 
-    def _create_widgets(self, device, attr):
+        self._create_widgets()
+
+    def _create_widgets(self):
         """Create and configure all widgets."""
         # Accessibility.
         self.enabled = tk.IntVar(self, 1)
         self.state_chkbtn = tk.Checkbutton(self, variable=self.enabled,
-                                           command=self._toggle_state)
+                                           command=self.update_state)
         # Device and attributes.
-        self.device_attr_label = tk.Label(self, text=device + "::" + attr)
+        self.device_attr_label = tk.Label(self,
+                                          text=self.device + "::" + self.attr)
         # Start, end, step.
         entry_width = 15
         self.start_entry = tk.Entry(self, fg="grey", width=entry_width)
@@ -209,7 +231,7 @@ class ScanEntry(tk.Frame):
         # Delete.
         self.delete_btn = tk.Button(self, text="X", font="-weight bold",
                                     fg="white", bg="red", width=1,
-                                    command=self._delete)
+                                    command=self.destroy)
 
         self.columnconfigure(1, weight=1)
         self.state_chkbtn.grid(row=0, column=0)
@@ -218,11 +240,6 @@ class ScanEntry(tk.Frame):
         self.end_entry.grid(row=0, column=3)
         self.step_entry.grid(row=0, column=4)
         self.delete_btn.grid(row=0, column=5)
-
-    def _delete(self):
-        """Delete widget."""
-        self.destroy()
-        # TODO: delete from |Application.scan_entries|.
 
     def _on_entry_focusin(self, event):
         """On tk.entry is focused. Bound with event <FocusIn>.
@@ -250,18 +267,14 @@ class ScanEntry(tk.Frame):
         elif event.widget == self.step_entry:
             event.widget.insert(0, "step")
 
-    def _toggle_state(self):
+    def update_state(self):
         """Toggle between enabled and disabled. Bound with |state_chkbtn|."""
         if self.enabled.get() == 0:
-            self.device_attr_label.config(fg="grey")
-            self.start_entry.config(state=tk.DISABLED)
-            self.end_entry.config(state=tk.DISABLED)
-            self.step_entry.config(state=tk.DISABLED)
+            gui.Application.change_state(self, False)
+            gui.Application.change_state(self.state_chkbtn, True)
+            gui.Application.change_state(self.delete_btn, True)
         else:
-            self.device_attr_label.config(fg="black")
-            self.start_entry.config(state=tk.NORMAL)
-            self.end_entry.config(state=tk.NORMAL)
-            self.step_entry.config(state=tk.NORMAL)
+            gui.Application.change_state(self, True)
 
 
 if __name__ == "__main__":

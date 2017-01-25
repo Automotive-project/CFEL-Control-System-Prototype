@@ -6,6 +6,8 @@ Tkinter is used for GUI.
 
 """
 
+from collections import deque
+
 import Tkinter as tk
 from Tkinter import N, S, E, W
 
@@ -17,8 +19,6 @@ class Tango(object):
         self.device_classes = ["Motor", "LimaCCDs"]
         self.devices = ["MotorXXX", "LimaCCDsYYY"]
 
-        print self.devices
-
     def get_device_class(self, device):
         """Return the tango class of |device|."""
         return self.device_classes[self.devices.index(device)]
@@ -29,10 +29,15 @@ class Application(tk.Frame):
 
     This frame is the only child of the root container. Besides the top menubar,
     it has two children. The |scan_frame| is for scanning, and the
-    |device_frame| is for device.
+    |device_frame| is for device management.
+
+    Args:
+        master (tk.Widget): reference to parent widget.
 
     Attributes:
-        TODO
+        tango (Tango): tango control system interface.
+        devices (list of str): name of available devices, excluding added ones.
+        added_devices (list of str): name of added devices.
 
     """
     def __init__(self, master):
@@ -40,41 +45,34 @@ class Application(tk.Frame):
 
         # Load data from tango.
         self.tango = Tango()
-        self.devices_name = self.tango.devices[:]
+        self.devices = sorted(self.tango.devices)
         self.added_devices = []
 
         # Render the layout.
         self._configure_master()
         self._create_widgets()
 
-        # Tests
-        # raw_input("aaa")
-        # self.update_menu(self.scannable_device_menu,
-                # self.selected_scannable_device, self.added_devices)
-
     def _add_device(self):
         """Add device entry.
 
-        Triggered by |add_device_btn|.
+        Triggered by |add_device_btn|. Maintain lists |devices| and
+        |added_devices|, menus |device_menu| and |scannable_device_menu| as well.
 
         """
         device_name = self.selected_device.get()
         # Avoid unspecified device.
         if device_name == "-":
             return
-        # TODO: remove device from |devices_name| after being added.
-        # TODO: maintain order of |devices_name|.
-        # TODO: maintain |added_devices| and |devices_name| in device.on_destroy
         device_class = self.tango.get_device_class(device_name)
         device = getattr(widget, device_class + "Device") \
-                (self.device_workspace_frame, device_name)
+                (self, self.device_workspace_frame, device_name)
         device.grid(row=0, column=len(self.device_workspace_frame.children),
                     sticky=(N, S), padx=5)
         self.added_devices.append(device_name)
         self._update_menu(self.scannable_device_menu,
                           self.selected_scannable_device, self.added_devices)
-        print len(self.added_devices)
-        print self.device_workspace_frame.children
+        self.devices.remove(device_name)
+        self._update_menu(self.device_menu, self.selected_device, self.devices)
 
     def _add_scan(self):
         """Add scan entry.
@@ -117,6 +115,10 @@ class Application(tk.Frame):
         self.master.columnconfigure(0, weight=1)
         self.grid(row=0, column=0, sticky=(N, S, E, W))
 
+        # Make all widgets focusable in order to remove focus from widget, like
+        # entry, when clicking elsewhere.
+        self.bind_all("<1>", lambda event:event.widget.focus_set())
+
     def _create_widgets(self):
         """Create and configure all widgets."""
         # Menu.
@@ -143,6 +145,7 @@ class Application(tk.Frame):
         self.scan_stop_btn = tk.Button(self.scan_frame, text="Stop", fg="white",
                                        bg="red", command=self._stop_scan)
         self.selected_scannable_device = tk.StringVar(self.scan_frame, "-")
+        self.selected_scannable_device.trace("w", self._on_scannable_device_change)
         self.scannable_device_menu = \
                 tk.OptionMenu(self.scan_frame, self.selected_scannable_device,
                               "-", command=self._on_scannable_device_change)
@@ -158,7 +161,7 @@ class Application(tk.Frame):
         self.selected_device = tk.StringVar(self.device_frame, "-")
         self.device_menu = tk.OptionMenu(self.device_frame,
                                          self.selected_device,
-                                         *self.devices_name)
+                                         *self.devices)
         self.add_device_btn = tk.Button(self.device_frame, text="Add",
                                         command=self._add_device)
         self.device_workspace_frame = tk.Frame(self.device_frame)
@@ -202,10 +205,23 @@ class Application(tk.Frame):
         self.device_frame.columnconfigure(1, weight=1)
         self.device_workspace_frame.rowconfigure(0, weight=1)
 
-    def _on_scannable_device_change(self, device):
-        """On |scannable_device_menu| change."""
-        # TODO: update |scannable_attr_menu| -> |scannable_device_menu| changed.
-        pass
+    def _on_scannable_device_change(self, *args):
+        """On |scannable_device_menu| change.
+
+        Maintain |scannable_attr_menu|.
+        """
+        device_name = self.selected_scannable_device.get()
+        if device_name == "-":
+            self._update_menu(self.scannable_attr_menu,
+                              self.selected_scannable_attr, [])
+            return
+        device = self.device_workspace_frame.children[device_name.lower()]
+        attributes = []
+        # FIX: Is |common_attr| == scannable_attr?
+        for attr in device.common_attr:
+            attributes.append(attr.name)
+        self._update_menu(self.scannable_attr_menu,
+                          self.selected_scannable_attr, attributes)
 
     def _open_about(self):
         """Open about menu."""
@@ -222,24 +238,82 @@ class Application(tk.Frame):
         # TODO.
         tutorial_win = tk.Toplevel(self.master)
 
+    def _remove_device(self, device):
+        """Remove device entry.
+
+        Triggered by |widget.DeviceBase.delete_btn|. Maintain lists |devices|
+        and |added_devices|, menus |device_menu| and |scannable_device_menu| as
+        well. Also, remove scan entries related to device.
+
+        """
+        self.added_devices.remove(device)
+        self._update_menu(self.scannable_device_menu,
+                          self.selected_scannable_device, self.added_devices)
+        self.devices.append(device)
+        list.sort(self.devices)
+        self._update_menu(self.device_menu, self.selected_device, self.devices)
+
+        for entry in self.scan_workspace_frame.children.values():
+            if entry.device == device:
+                entry.destroy()
+
     def _start_scan(self):
         """Start scanning."""
         # TODO.
-        pass
+        self.change_state(self, False)
+        self.change_state(self.scan_stop_btn, True)
 
     def _stop_scan(self):
         """Stop scanning."""
         # TODO.
-        pass
+        self.change_state(self, True)
+        for entry in self.scan_workspace_frame.children.values():
+            entry.update_state()
 
     @staticmethod
     def _update_menu(menu, variable, choices):
-        """Update choices of OptionMenu."""
+        """Update choices of OptionMenu.
+
+        Args:
+            menu (tk.Optionmenu): menu to be updated.
+            variable (tk.Variable): variable bound with |menu|.
+            choices (list of str): new options to be assigned to |menu|.
+
+        """
         variable.set("-")
         menu["menu"].delete(0, "end")
         for choice in choices if choices else ["-"]:
             menu["menu"].add_command(label=choice,
                                      command=lambda c=choice: variable.set(c))
+
+    @staticmethod
+    def change_state(widget, state):
+        """Change |widget| to state enabled or disabled, and all its children
+        recursively.
+
+        Args:
+            widget (tk.Widget): widget to be changed.
+            state (bool): enable or disable the |widget|.
+
+        """
+        if state:
+            # State config for widget label.
+            label_cfg = {"fg": "black"}
+            # State config for other widgets, including button, checkbutton,
+            # entry, optionmenu.
+            cfg = {"state": tk.NORMAL}
+        else:
+            label_cfg = {"fg": "grey"}
+            cfg = {"state": tk.DISABLED}
+        widgets = deque([widget])
+        while widgets:
+            w = widgets.popleft()
+            widgets.extend(w.children.values())
+            if w.widgetName == "label":
+                w.config(**label_cfg)
+            elif w.widgetName in ["button", "checkbutton", "entry",
+                                  "menubutton"]:
+                w.config(**cfg)
 
 
 if __name__ == "__main__":
