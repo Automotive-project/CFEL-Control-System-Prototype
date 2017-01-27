@@ -51,10 +51,10 @@ class DeviceBase(tk.Frame):
 
     Attributes:
         device_type (str): type of device, eg. Camera.
-        device_name (str): name of device, eg. cfeld/limaccds/poingrey
+        device_name (str): name of device, eg. cfeld/limaccds/poingrey.
         common_attr (list of |Attribute|): common attributes.
         other_attr (list of |Attribute|):
-                other attributes displayed only in expert mode.
+                other attributes which are displayed only in expert mode.
 
     """
     def __init__(self, app, master, name):
@@ -76,7 +76,7 @@ class DeviceBase(tk.Frame):
         self.is_expert = tk.IntVar(self, 0)
         self.expert_chkbtn = tk.Checkbutton(self.header_frame,
                                             variable=self.is_expert,
-                                            command=self._toggle_expert)
+                                            command=self._update_mode)
         # Body.
         self.common_attr_frame = tk.Frame(self)
         self.other_attr_frame = tk.Frame(self)
@@ -130,8 +130,8 @@ class DeviceBase(tk.Frame):
         self.app._remove_device(self.device_name)
         self.destroy()
 
-    def _toggle_expert(self):
-        """Toggle expert mode. Bound with |expert_chkbtn|."""
+    def _update_mode(self):
+        """Turn on/off expert mode according to |expert_chkbtn|."""
         if self.is_expert.get() == 0:
             self.other_attr_frame.grid_remove()
         else:
@@ -268,7 +268,7 @@ class ScanEntry(tk.Frame):
             event.widget.insert(0, "step")
 
     def update_state(self):
-        """Toggle between enabled and disabled. Bound with |state_chkbtn|."""
+        """Enable or disable widgets according to |state_chkbtn|."""
         if self.enabled.get() == 0:
             gui.Application.change_state(self, False)
             gui.Application.change_state(self.state_chkbtn, True)
