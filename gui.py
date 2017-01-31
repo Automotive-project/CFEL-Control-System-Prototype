@@ -1,33 +1,77 @@
 #!/usr/bin/env python
-# pylint: disable=attribute-defined-outside-init, fixme, line-too-long, too-few-public-methods, too-many-instance-attributes, too-many-public-methods, unused-variable
+# pylint: disable=attribute-defined-outside-init, fixme, line-too-long, redefined-outer-name, star-args, too-few-public-methods, too-many-instance-attributes, too-many-public-methods, unused-argument, unused-variable
 """This module is the main GUI for Control System.
 
 Tkinter is used for GUI.
 
 """
 
+import time
+import sys
 from collections import deque
 
 import Tkinter as tk
 from Tkinter import N, S, E, W
 
 import PyTango
+from sardana.taurus.core.tango.sardana.macroserver import BaseDoor
 
 import widget
+
+def is_number(string):
+    """Return float number if |string| is a number. Otherwise, return None."""
+    try:
+        return float(string)
+    except ValueError:
+        return None
+
 
 class Tango(object):
     """Data class. Interact with tango system."""
     def __init__(self):
         self._db = PyTango.Database()
+        # Hard coded. Need a better way to obtain the door name.
+        door_name = "cfeld/door/cfeld-pcx27083.01"
+        if not self.is_door(door_name):
+            print "Error: invalid door name %s." % door_name
+            sys.exit(1)
+        door_full_name = "%s:%s/%s" % (self._db.get_db_host(), self._db.get_db_port(), door_name)
+        # Sardana door.
+        self.door = BaseDoor(door_full_name)
+        # Debug, Output stream of door log.
+        self.debug = self.door.getLogObj('debug')
+        self.output = self.door.getLogObj('output')
 
         self.device_classes = ["Motor", "LimaCCDs"]
         self.devices = []
         for class_type in self.device_classes:
             self.devices.extend(self._db.get_device_exported_for_class(class_type).value_string)
 
+    def get_device_alias(self, device):
+        """Return the alias of |device|."""
+        return self._db.get_alias_from_device(device)
+
     def get_device_class(self, device):
         """Return the tango class of |device|."""
         return self._db.get_class_for_device(device)
+
+    def is_sardana_idle(self):
+        """Return True if sardana is at state ON instead of RUNNING, OFF."""
+        return self.door.getState() == PyTango.DevState.ON
+
+    def is_door(self, door_name):
+        """Return True if |door_name| is a valid Sardana door."""
+        server_list = self._db.get_server_list('MacroServer/*').value_string
+        for server in server_list:
+            server_devs = self._db.get_device_class_list(server).value_string
+            devs, classes = server_devs[0::2], server_devs[1::2]
+            for idx, dev in enumerate(devs):
+                if dev.lower() == door_name.lower():
+                    if classes[idx] == "Door":
+                        return True
+                    else:
+                        return False
+        return False
 
 
 class Application(tk.Frame):
@@ -123,7 +167,7 @@ class Application(tk.Frame):
 
         # Make all widgets focusable in order to remove focus from widget, like
         # entry, when clicking elsewhere.
-        self.bind_all("<1>", lambda event:event.widget.focus_set())
+        self.bind_all("<1>", lambda event: event.widget.focus_set())
 
     def _create_widgets(self):
         """Create and configure all widgets."""
@@ -223,8 +267,7 @@ class Application(tk.Frame):
             return
         device = self.device_workspace_frame.children[device_name.lower()]
         attributes = []
-        # FIX: Is |common_attr| == scannable_attr?
-        for attr in device.common_attr:
+        for attr in device.scannable_attr:
             attributes.append(attr.name)
         self._update_menu(self.scannable_attr_menu,
                           self.selected_scannable_attr, attributes)
@@ -244,7 +287,7 @@ class Application(tk.Frame):
         # TODO.
         tutorial_win = tk.Toplevel(self.master)
 
-    def _remove_device(self, device):
+    def remove_device(self, device):
         """Remove device entry.
 
         Triggered by |widget.DeviceBase.delete_btn|. Maintain lists |devices|
@@ -265,12 +308,47 @@ class Application(tk.Frame):
 
     def _start_scan(self):
         """Start scanning."""
-        # TODO.
+        scan_entry = None
+        for entry in self.scan_workspace_frame.children.values():
+            if entry.enabled.get() == 1:
+                scan_entry = entry
+                break
+        if not scan_entry:
+            print "Warning: not attributes to be scanned."
+            return
+
+        start = is_number(scan_entry.start_entry.get())
+        end = is_number(scan_entry.end_entry.get())
+        step = is_number(scan_entry.step_entry.get())
+        if not start or not end or not step:
+            print "Error: invalid start, end or step value."
+
         self.change_state(self, False)
         self.change_state(self.scan_stop_btn, True)
 
+        device = self.device_workspace_frame.children[scan_entry.device.lower()]
+        for attr in device.scannable_attr:
+            if attr.name == scan_entry.attr:
+                continue
+            # TODO: Set other value-provided attribute.
+
+        value = start
+        while value < end:
+            self.tango.output.clearLogBuffer()
+            self.tango.debug.clearLogBuffer()
+            device.set_attr(scan_entry.attr, value)
+            # Wait for attribute change finish.
+            while not self.tango.debug.getLogBuffer():
+                time.sleep(0.05)
+            while not self.tango.is_sardana_idle():
+                time.sleep(0.05)
+            # print output.getLogBuffer()
+            # print debug.getLogBuffer()
+            value += step
+
     def _stop_scan(self):
         """Stop scanning."""
+        print "Warning: something bad happens if abort."
         # TODO.
         self.change_state(self, True)
         for entry in self.scan_workspace_frame.children.values():
@@ -313,13 +391,13 @@ class Application(tk.Frame):
             cfg = {"state": tk.DISABLED}
         widgets = deque([widget])
         while widgets:
-            w = widgets.popleft()
-            widgets.extend(w.children.values())
-            if w.widgetName == "label":
-                w.config(**label_cfg)
-            elif w.widgetName in ["button", "checkbutton", "entry",
-                                  "menubutton"]:
-                w.config(**cfg)
+            _wid = widgets.popleft()
+            widgets.extend(_wid.children.values())
+            if _wid.widgetName == "label":
+                _wid.config(**label_cfg)
+            elif _wid.widgetName in ["button", "checkbutton", "entry",
+                                     "menubutton"]:
+                _wid.config(**cfg)
 
 
 if __name__ == "__main__":

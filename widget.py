@@ -62,9 +62,11 @@ class DeviceBase(tk.Frame):
                           relief=tk.RAISED)
 
         self.app = app
-        self.device_type = ""
-        self.device_name = ""
+        self.device_type = "DeviceBase"
+        self.device_name = "DeviceBase"
         self.common_attr = []
+        # FIX: Is |common_attr| == scannable_attr?
+        self.scannable_attr = self.common_attr
         self.other_attr = []
 
     def _create_widgets(self):
@@ -127,7 +129,7 @@ class DeviceBase(tk.Frame):
 
     def _delete(self):
         """Delete widget."""
-        self.app._remove_device(self.device_name)
+        self.app.remove_device(self.device_name)
         self.destroy()
 
     def _update_mode(self):
@@ -136,6 +138,17 @@ class DeviceBase(tk.Frame):
             self.other_attr_frame.grid_remove()
         else:
             self.other_attr_frame.grid()
+
+    def log(self, out):
+        """Log essential information. Called at each step during scanning."""
+        out.write("This is default log from device %s.\n" % self.device_name)
+
+    def set_attr(self, attr, value):
+        """Set attribute value. Should take care of all attributes in
+        |scannable_attr|.
+
+        """
+        pass
 
 
 class LimaCCDsDevice(DeviceBase):
@@ -160,6 +173,17 @@ class LimaCCDsDevice(DeviceBase):
 
         self._create_widgets()
 
+    def log(self, out):
+        """Capture and store image. Log image path and attributes in |out|."""
+        pass
+
+    def set_attr(self, attr, value):
+        """Set attribute value. Should take care of all attributes in
+        |scannable_attr|.
+
+        """
+        pass
+
 
 class MotorDevice(DeviceBase):
     """Device widget of Camera.
@@ -178,10 +202,25 @@ class MotorDevice(DeviceBase):
 
         self.device_type = "Camera"
         self.device_name = name
-        self.common_attr = [Attribute("Speed", tk.Entry)]
+        self.common_attr = [Attribute("Position", tk.Entry), Attribute("Speed", tk.Entry)]
         self.other_attr = [Attribute("Step size", tk.Entry)]
 
         self._create_widgets()
+
+    def log(self, out):
+        """Log attributes in |out|."""
+        pass
+
+    def set_attr(self, attr, value):
+        """Set attribute value. Should take care of all attributes in
+        |scannable_attr|.
+
+        """
+        if attr == "Position":
+            device_alias = self.app.tango.get_device_alias(self.device_name)
+            self.app.tango.door.runmacro(["mv", device_alias, str(value)])
+        else:
+            print "Error: unknown scannable attribute %s." % attr
 
 
 class ScanEntry(tk.Frame):
@@ -280,7 +319,8 @@ class ScanEntry(tk.Frame):
 if __name__ == "__main__":
     ROOT = tk.Tk()
     ATTR = Attribute("TEST_ATTR")
-    LIMACCD = LimaCCDsDevice(ROOT, "TEST_CAMERA")
-    MOTOR = MotorDevice(ROOT, "TEST_CAMERA")
+
+    LIMACCD = LimaCCDsDevice(ROOT, ROOT, "TEST_CAMERA")
+    MOTOR = MotorDevice(ROOT, ROOT, "TEST_CAMERA")
     ENTRY = ScanEntry(ROOT, "TEST_DEVICE", "TEST_ATTR")
     ROOT.destroy()
