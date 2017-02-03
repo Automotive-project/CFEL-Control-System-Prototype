@@ -36,11 +36,13 @@ output.clearLogBuffer()
 debug.clearLogBuffer()
 # door.runmacro(["wa"])
 # door.runmacro(["mv", "exp_dmy01", "0"])
-door.runmacro(["ascan", "exp_dmy01", "0", "1", "10", "0.2"])
+door.runmacro(["mv", "motor/dummy_mot_ctrl/1", "0"])
+# door.runmacro(["ascan", "exp_dmy01", "0", "1", "10", "0.2"])
+# door.runmacro(["ascan", "motor/dummy_mot_ctrl/1", "0", "1", "10", "0.2"])
 while not debug.getLogBuffer():
     print "empty"
     time.sleep(0.05)
-while door.getState() != PyTango.DevState.ON:
+while door.getState() == PyTango.DevState.RUNNING:
     print "running"
     time.sleep(0.05)
 print output.getLogBuffer()

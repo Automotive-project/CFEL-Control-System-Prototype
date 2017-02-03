@@ -7,30 +7,30 @@ Tkinter is used for GUI.
 """
 
 import time
+import Tkinter as tk
 import sys
 from collections import deque
-
-import Tkinter as tk
 from Tkinter import N, S, E, W
 
 import PyTango
 from sardana.taurus.core.tango.sardana.macroserver import BaseDoor
 
 import widget
-
-def is_number(string):
-    """Return float number if |string| is a number. Otherwise, return None."""
-    try:
-        return float(string)
-    except ValueError:
-        return None
-
+from helper import is_number
 
 class Tango(object):
-    """Data class. Interact with tango system."""
+    """Interact with Tango system.
+
+    Attributes:
+        _db: instance of Tango database.
+        door: instance of Sardana door.
+        TODO
+
+    """
     def __init__(self):
         self._db = PyTango.Database()
         # Hard coded. Need a better way to obtain the door name.
+        # TODO: search in the door database.
         door_name = "cfeld/door/cfeld-pcx27083.01"
         if not self.is_door(door_name):
             print "Error: invalid door name %s." % door_name
@@ -55,12 +55,17 @@ class Tango(object):
         """Return the tango class of |device|."""
         return self._db.get_class_for_device(device)
 
-    def is_sardana_idle(self):
+    def is_sardana_running(self):
         """Return True if sardana is at state ON instead of RUNNING, OFF."""
-        return self.door.getState() == PyTango.DevState.ON
+        return self.door.getState() == PyTango.DevState.RUNNING
 
     def is_door(self, door_name):
-        """Return True if |door_name| is a valid Sardana door."""
+        """Return True if |door_name| is a valid Sardana door.
+
+        Args:
+            door_name (str): full name of the door, eg. cfeld/door/door.01.
+
+        """
         server_list = self._db.get_server_list('MacroServer/*').value_string
         for server in server_list:
             server_devs = self._db.get_device_class_list(server).value_string
@@ -72,6 +77,24 @@ class Tango(object):
                     else:
                         return False
         return False
+
+    def run_macro(self, command):
+        """Run macro on Sardana.
+
+        Args:
+            command (list of str): macro encapsulated in list, eg. ["wa"].
+
+        """
+        self.output.clearLogBuffer()
+        self.debug.clearLogBuffer()
+        self.door.runmacro(command)
+        # Wait for attribute change finish.
+        while not self.debug.getLogBuffer():
+            time.sleep(0.05)
+        while self.is_sardana_running():
+            time.sleep(0.05)
+        # print self.output.getLogBuffer()
+        # print self.debug.getLogBuffer()
 
 
 class Application(tk.Frame):
@@ -97,6 +120,9 @@ class Application(tk.Frame):
         self.tango = Tango()
         self.devices = sorted(self.tango.devices)
         self.added_devices = []
+
+        # Where log files are placed.
+        self.log_path = "/home/ax01user/test/log"
 
         # Render the layout.
         self._configure_master()
@@ -326,24 +352,14 @@ class Application(tk.Frame):
         self.change_state(self, False)
         self.change_state(self.scan_stop_btn, True)
 
-        device = self.device_workspace_frame.children[scan_entry.device.lower()]
-        for attr in device.scannable_attr:
-            if attr.name == scan_entry.attr:
-                continue
-            # TODO: Set other value-provided attribute.
+        for device in self.device_workspace_frame.children.values():
+            if device.is_always_recording:
+
+
 
         value = start
         while value < end:
-            self.tango.output.clearLogBuffer()
-            self.tango.debug.clearLogBuffer()
             device.set_attr(scan_entry.attr, value)
-            # Wait for attribute change finish.
-            while not self.tango.debug.getLogBuffer():
-                time.sleep(0.05)
-            while not self.tango.is_sardana_idle():
-                time.sleep(0.05)
-            # print output.getLogBuffer()
-            # print debug.getLogBuffer()
             value += step
 
     def _stop_scan(self):

@@ -6,8 +6,11 @@ Tkinter is used for GUI.
 
 """
 
+import time
 import Tkinter as tk
 from Tkinter import N, S, E, W
+
+import PyTango
 
 import gui
 
@@ -52,6 +55,8 @@ class DeviceBase(tk.Frame):
     Attributes:
         device_type (str): type of device, eg. Camera.
         device_name (str): name of device, eg. cfeld/limaccds/poingrey.
+        tango_device: instance of tango device proxy.
+        is_always_recording (bool): whether record device info when scanning.
         common_attr (list of |Attribute|): common attributes.
         other_attr (list of |Attribute|):
                 other attributes which are displayed only in expert mode.
@@ -63,7 +68,9 @@ class DeviceBase(tk.Frame):
 
         self.app = app
         self.device_type = "DeviceBase"
-        self.device_name = "DeviceBase"
+        self.device_name = name
+        self.tango_device = PyTango.DeviceProxy(name)
+        self.is_always_recording = False
         self.common_attr = []
         # FIX: Is |common_attr| == scannable_attr?
         self.scannable_attr = self.common_attr
@@ -132,6 +139,25 @@ class DeviceBase(tk.Frame):
         self.app.remove_device(self.device_name)
         self.destroy()
 
+    def _get_attribute(self, attr):
+        """Return value of |attribute| via tango device proxy.
+
+        Args:
+            attr(str): attribute.
+
+        """
+        return self.tango_device.read_attribute(attr).value
+
+    def _set_attribute(self, attr, val):
+        """Set value to attribute via tango device proxy.
+
+        Args:
+            attr(str): attribute.
+            val: value.
+
+        """
+        self.tango_device.write_attribute(attr, val)
+
     def _update_mode(self):
         """Turn on/off expert mode according to |expert_chkbtn|."""
         if self.is_expert.get() == 0:
@@ -140,12 +166,22 @@ class DeviceBase(tk.Frame):
             self.other_attr_frame.grid()
 
     def log(self, out):
-        """Log essential information. Called at each step during scanning."""
-        out.write("This is default log from device %s.\n" % self.device_name)
+        """Log essential information. Called at each step of scanning if
+        |is_always_log| is True or it is the device to be scanned.
 
-    def set_attr(self, attr, value):
+        Args:
+            out (file object): where log is written.
+
+        """
+        out.write("%s::%s::DefaultLog\n" % self.device_type, self.device_name)
+
+    def set_attr(self, attr, val):
         """Set attribute value. Should take care of all attributes in
-        |scannable_attr|.
+        |common_attr|, |scannable_attr| and |other_attr|.
+
+        Args:
+            attr(str): attribute.
+            val: value.
 
         """
         pass
@@ -158,9 +194,7 @@ class LimaCCDsDevice(DeviceBase):
         - Exposure time: tk.Entry
 
     Other attributes:
-        - Aperture: tk.Entry
-
-    ['acq_status', 'saving_next_number', 'debug_modules', 'camera_pixelsize', 'acq_mode', 'user_detector_name', 'video_roi', 'video_active', 'acc_mode', 'video_bin', 'config_available_module', 'image_height', 'concat_nb_frames', 'acc_dead_time', 'acc_offset_before', 'shared_memory_names', 'acq_expo_time', 'last_base_image_ready', 'ready_for_next_acq', 'saving_managed_mode', 'acc_live_time', 'video_last_image', 'last_counter_ready', 'acc_saturated_active', 'video_gain', 'image_type', 'last_image', 'shutter_mode', 'image_width', 'image_sizes', 'acc_time_mode', 'debug_types', 'plugin_list', 'camera_type', 'instrument_name', 'latency_time', 'acq_trigger_mode', 'acc_max_expo_time', 'image_events_push_data', 'image_events_max_rate', 'shutter_manual_state', 'debug_modules_possible', 'saving_index_format', 'acc_nb_frames', 'saving_header_delimiter', 'image_flip', 'saving_common_header', 'debug_types_possible', 'acc_saturated_cblevel', 'ready_for_next_image', 'image_rotation', 'acc_expo_time', 'acc_saturated_threshold', 'video_exposure', 'acc_threshold_before', 'image_bin', 'saving_suffix', 'saving_prefix', 'lima_type', 'acq_nb_frames', 'acq_status_fault_error', 'shared_memory_active', 'video_live', 'config_available_name', 'last_image_ready', 'saving_format', 'write_statistic', 'buffer_max_memory', 'image_roi', 'video_mode', 'video_last_image_counter', 'last_image_acquired', 'saving_frame_per_file', 'shutter_close_time', 'camera_model', 'saving_directory', 'saving_mode', 'video_source', 'last_image_saved', 'saving_overwrite_policy', 'plugin_type_list', 'valid_ranges', 'shutter_open_time', 'State', 'Status']
+        - Number of frames: tk.Entry
 
     """
     def __init__(self, app, master, name):
@@ -168,59 +202,119 @@ class LimaCCDsDevice(DeviceBase):
 
         self.device_type = "LimaCCDs"
         self.device_name = name
+        self.is_always_recording = True
         self.common_attr = [Attribute("Exposure Time", tk.Entry)]
-        self.other_attr = [Attribute("Aperture", tk.Entry)]
+        self.other_attr = [Attribute("Number of frames", tk.Entry)]
 
         self._create_widgets()
 
     def log(self, out):
-        """Capture and store image. Log image path and attributes in |out|."""
-        pass
+        """Log essential information. Called at each step of scanning if
+        |is_always_log| is True or it is the device to be scanned.
 
-    def set_attr(self, attr, value):
-        """Set attribute value. Should take care of all attributes in
-        |scannable_attr|.
+        Args:
+            out (file object): where log is written.
+
+        Log:
+            captured images stored in |app.log_path|.
+            LimaCCDs::DeviceName::Exposure Time = 1.0
+            LimaCCDs::DeviceName::ImageFile = CS0001.raw
 
         """
-        pass
+        nb_frames = self.tango_device.acq_nb_frames
+        self.tango_device.prepareAcq()
+        self.tango_device.startAcq()
+        # Wait for capturing finish.
+        while self.tango_device.last_image_ready != nb_frames - 1:
+            time.sleep(0.05)
+        self.tango_device.saving_directory = self.app.log_path
+        self.tango_device.saving_prefix = "CS"
+        # self.tango_device.saving_next_number = FILE_INDEX
+        self.tango_device.saving_suffix = "raw"
+        self.tango_device.saving_format = "RAW"
+        self.tango_device.saving_overwrite_policy = "OVERWRITE"
+        expo = self._get_attribute("acq_expo_time")
+        content = "%s::%s::Exposure Time = %s\n" % self.device_type, self.device_name, str(expo)
+        for image_idx in range(nb_frames):
+            image_file_name = "%s%04d.%s" % self.tango_device.saving_prefix, self.tango_device.saving_next_number, self.tango_device.saving_suffix
+            self.tango_device.writeImage(image_idx)
+            content += "%s::%s::ImageFile%d = %s\n" % self.device_type, self.device_name, image_idx, image_file_name
+        out.write(content)
+
+    def set_attr(self, attr, val):
+        """Set attribute value. Should take care of all attributes in
+        |common_attr|, |scannable_attr| and |other_attr|.
+
+        Args:
+            attr(str): attribute.
+            val: value.
+
+        """
+        if attr == "Exposure Time":
+            min_et, max_et = self._get_attribute("valid_ranges")[:2]
+            if val < min_et or val > max_et:
+                print "Error: illegal exposure time %s." % val
+                return
+            self._set_attribute("acq_expo_time", val)
+        elif attr == "Number of frames":
+            self._set_attribute("acq_nb_frames", val)
+        else:
+            print "Error: unknown attribute %s." % attr
 
 
 class MotorDevice(DeviceBase):
-    """Device widget of Camera.
+    """Device widget of Motor.
 
     Common attributes:
-        - Exposure time: tk.Entry
+        - Position: tk.Entry
 
     Other attributes:
-        - Aperture: tk.Entry
-
-    ['Instrument', 'SimulationMode', 'Acceleration', 'Step_per_unit', 'Velocity', 'Base_rate', 'Sign', 'Limit_switches', 'DialPosition', 'Deceleration', 'Offset', 'Position', 'Backlash', 'LowerLimitSwitch', 'UpperLimitSwitch', 'Power', 'State', 'Status']
+        - Step per unit: tk.Entry
 
     """
     def __init__(self, app, master, name):
         DeviceBase.__init__(self, app, master, name)
 
-        self.device_type = "Camera"
+        self.device_type = "Motor"
         self.device_name = name
-        self.common_attr = [Attribute("Position", tk.Entry), Attribute("Speed", tk.Entry)]
-        self.other_attr = [Attribute("Step size", tk.Entry)]
+        self.is_always_recording = False
+        self.common_attr = [Attribute("Position", tk.Entry)]
+        self.other_attr = [Attribute("Step per unit", tk.Entry)]
 
         self._create_widgets()
 
     def log(self, out):
-        """Log attributes in |out|."""
-        pass
+        """Log essential information. Called at each step of scanning if
+        |is_always_log| is True or it is the device to be scanned.
 
-    def set_attr(self, attr, value):
+        Args:
+            out (file object): where log is written.
+
+        Log:
+            Motor::DeviceName::Position = 0.0
+
+        """
+        pos = self._get_attribute("position")
+        content = "%s::%s::Position = %s\n" % self.device_type, self.device_name, str(pos)
+        out.write(content)
+
+    def set_attr(self, attr, val):
         """Set attribute value. Should take care of all attributes in
-        |scannable_attr|.
+        |common_attr|, |scannable_attr| and |other_attr|.
+
+        Args:
+            attr(str): attribute.
+            val: value.
 
         """
         if attr == "Position":
+            # Must use device alias.
             device_alias = self.app.tango.get_device_alias(self.device_name)
-            self.app.tango.door.runmacro(["mv", device_alias, str(value)])
+            self.app.tango.run_macro(["mv", device_alias, str(val)])
+        elif attr == "Step per unit":
+            self._set_attribute("step_per_unit", val)
         else:
-            print "Error: unknown scannable attribute %s." % attr
+            print "Error: unknown attribute %s." % attr
 
 
 class ScanEntry(tk.Frame):
