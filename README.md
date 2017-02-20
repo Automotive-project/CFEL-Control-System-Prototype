@@ -1,1 +1,1 @@
-# CFEL-Control-System-Prototype
+# CFEL-Control-System-Prototype# Requirement- [http://www.tango-controls.org/](Tango Control System) including PyTango and Sardana.## How to run it```./gui.py```## Files- gui.py: main application. Also contains the interface to tango system.- widget.py: gui stuffs related to smaller components.- helper.py: some helper functions.- test_*.py: some test files.
