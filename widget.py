@@ -303,7 +303,6 @@ class LimaCCDsDevice(DeviceBase):
             if val < min_et or val > max_et:
                 tkMessageBox.showerror("Error",
                         "Illegal exposure time %s." % val)
-                tkMessageBox.showerror("Error", )
                 return False
             self._set_attribute("acq_expo_time", val)
         elif attr == "Number of frames":
