@@ -1,11 +1,12 @@
 #!/usr/bin/env python
-# pylint: disable=attribute-defined-outside-init, fixme, line-too-long, no-self-use, too-few-public-methods, too-many-ancestors, too-many-instance-attributes, too-many-public-methods, unused-variable
+# pylint: disable=attribute-defined-outside-init, fixme, no-self-use, too-few-public-methods, too-many-ancestors, too-many-instance-attributes, too-many-public-methods, unused-variable
 """This module contains custom widgets for Control System GUI.
 
 Tkinter is used for GUI.
 
 """
 
+import os
 import time
 import Tkinter as tk
 from Tkinter import N, S, E, W
@@ -72,8 +73,7 @@ class DeviceBase(tk.Frame):
         self.tango_device = PyTango.DeviceProxy(name)
         self.is_always_log = False
         self.common_attr = []
-        # FIX: Is |common_attr| == scannable_attr?
-        self.scannable_attr = self.common_attr
+        self.scannable_attr = []
         self.other_attr = []
 
     def _create_widgets(self):
@@ -93,10 +93,12 @@ class DeviceBase(tk.Frame):
             attr.name_widget = tk.Label(self.common_attr_frame, text=attr.name)
             attr.value_widget = \
                     attr.widget_type(self.common_attr_frame, width=10)
+            attr.value_widget.insert(0, self.get_attribute(attr.name))
         for attr in self.other_attr:
             attr.name_widget = tk.Label(self.other_attr_frame, text=attr.name)
             attr.value_widget = \
                     attr.widget_type(self.other_attr_frame, width=10)
+            attr.value_widget.insert(0, self.get_attribute(attr.name))
         # Footer.
         self.delete_btn = tk.Button(self, text="Delete", font="-weight bold",
                                     fg="white", bg="red", command=self._delete)
@@ -173,7 +175,7 @@ class DeviceBase(tk.Frame):
             out (file object): where log is written.
 
         """
-        out.write("%s::%s::DefaultLog\n" % self.device_type, self.device_name)
+        out.write("%s::%s::DefaultLog\n" % (self.device_type, self.device_name))
 
     def get_attribute(self, attr):
         """Get attribute value. Should take care of all attributes in
@@ -187,7 +189,8 @@ class DeviceBase(tk.Frame):
 
     def set_attribute(self, attr, val):
         """Set attribute value. Should take care of all attributes in
-        |common_attr|, |scannable_attr| and |other_attr|.
+        |common_attr|, |scannable_attr| and |other_attr|. Return False if
+        failed.
 
         Args:
             attr(str): attribute.
@@ -214,7 +217,13 @@ class LimaCCDsDevice(DeviceBase):
         self.device_name = name
         self.is_always_log = True
         self.common_attr = [Attribute("Exposure Time", tk.Entry)]
-        self.other_attr = [Attribute("Number of frames", tk.Entry)]
+        self.scannable_attr = self.common_attr
+        self.other_attr = [Attribute("Number of frames", tk.Entry),
+                           Attribute("Saving next number", tk.Entry)]
+
+        # TODO: this is a workaround of the original attribute
+        # "saving_next_number" which has some weird bugs.
+        self.saving_next_number = 0
 
         self._create_widgets()
 
@@ -228,27 +237,36 @@ class LimaCCDsDevice(DeviceBase):
         Log:
             captured images stored in |app.log_path|.
             LimaCCDs::DeviceName::Exposure Time = 1.0
-            LimaCCDs::DeviceName::ImageFile = CS0001.raw
+            LimaCCDs::DeviceName::ImageFile0 = CS0001.raw
 
         """
         nb_frames = self.tango_device.acq_nb_frames
+        # Prevent acquisition not finished error.
+        time.sleep(1.0)
         self.tango_device.prepareAcq()
         self.tango_device.startAcq()
         # Wait for capturing finish.
         while self.tango_device.last_image_ready != nb_frames - 1:
             time.sleep(0.05)
-        self.tango_device.saving_directory = self.app.log_path
-        self.tango_device.saving_prefix = "CS"
-        # self.tango_device.saving_next_number = FILE_INDEX
+        self.tango_device.saving_directory = os.path.dirname(out.name)
+        self.tango_device.saving_prefix = "LIMA"
         self.tango_device.saving_suffix = "raw"
         self.tango_device.saving_format = "RAW"
         self.tango_device.saving_overwrite_policy = "OVERWRITE"
         expo = self._get_attribute("acq_expo_time")
-        content = "%s::%s::Exposure Time = %s\n" % self.device_type, self.device_name, str(expo)
+        content = "%s::%s::Exposure Time = %s\n" % \
+                (self.device_type, self.device_name, str(expo))
         for image_idx in range(nb_frames):
-            image_file_name = "%s%04d.%s" % self.tango_device.saving_prefix, self.tango_device.saving_next_number, self.tango_device.saving_suffix
+            image_file_name = "%s%04d%s" % (self.tango_device.saving_prefix,
+                                            self.saving_next_number,
+                                            self.tango_device.saving_suffix)
+            self.tango_device.saving_next_number = self.saving_next_number
             self.tango_device.writeImage(image_idx)
-            content += "%s::%s::ImageFile%d = %s\n" % self.device_type, self.device_name, image_idx, image_file_name
+            self.saving_next_number += 1
+            content += "%s::%s::ImageFile%d = %s\n" % (self.device_type,
+                                                       self.device_name,
+                                                       image_idx,
+                                                       image_file_name)
         out.write(content)
 
     def get_attribute(self, attr):
@@ -263,13 +281,16 @@ class LimaCCDsDevice(DeviceBase):
             return self._get_attribute("acq_expo_time")
         elif attr == "Number of frames":
             return self._get_attribute("acq_nb_frames")
+        elif attr == "Saving next number":
+            return self.saving_next_number
         else:
             print "Error: unknown attribute %s." % attr
             return None
 
     def set_attribute(self, attr, val):
         """Set attribute value. Should take care of all attributes in
-        |common_attr|, |scannable_attr| and |other_attr|.
+        |common_attr|, |scannable_attr| and |other_attr|. Return False if
+        failed.
 
         Args:
             attr(str): attribute.
@@ -280,12 +301,16 @@ class LimaCCDsDevice(DeviceBase):
             min_et, max_et = self._get_attribute("valid_ranges")[:2]
             if val < min_et or val > max_et:
                 print "Error: illegal exposure time %s." % val
-                return
+                return False
             self._set_attribute("acq_expo_time", val)
         elif attr == "Number of frames":
             self._set_attribute("acq_nb_frames", val)
+        elif attr == "Saving next number":
+            self.saving_next_number = val
         else:
             print "Error: unknown attribute %s." % attr
+            return False
+        return True
 
 
 class MotorDevice(DeviceBase):
@@ -305,6 +330,7 @@ class MotorDevice(DeviceBase):
         self.device_name = name
         self.is_always_log = False
         self.common_attr = [Attribute("Position", tk.Entry)]
+        self.scannable_attr = self.common_attr
         self.other_attr = [Attribute("Step per unit", tk.Entry)]
 
         self._create_widgets()
@@ -321,7 +347,8 @@ class MotorDevice(DeviceBase):
 
         """
         pos = self._get_attribute("position")
-        content = "%s::%s::Position = %s\n" % self.device_type, self.device_name, str(pos)
+        content = "%s::%s::Position = %s\n" % \
+                (self.device_type, self.device_name, str(pos))
         out.write(content)
 
     def get_attribute(self, attr):
@@ -342,7 +369,8 @@ class MotorDevice(DeviceBase):
 
     def set_attribute(self, attr, val):
         """Set attribute value. Should take care of all attributes in
-        |common_attr|, |scannable_attr| and |other_attr|.
+        |common_attr|, |scannable_attr| and |other_attr|. Return False if
+        failed.
 
         Args:
             attr(str): attribute.
@@ -357,6 +385,8 @@ class MotorDevice(DeviceBase):
             self._set_attribute("step_per_unit", val)
         else:
             print "Error: unknown attribute %s." % attr
+            return False
+        return True
 
 
 class ScanEntry(tk.Frame):

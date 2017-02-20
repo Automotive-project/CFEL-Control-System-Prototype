@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# pylint: disable=attribute-defined-outside-init, fixme, line-too-long, redefined-outer-name, star-args, too-few-public-methods, too-many-instance-attributes, too-many-public-methods, unused-argument, unused-variable
+# pylint: disable=attribute-defined-outside-init, fixme, line-too-long, redefined-outer-name, star-args, too-few-public-methods, too-many-branches, too-many-instance-attributes, too-many-locals, too-many-public-methods, unused-argument, unused-variable
 """This module is the main GUI for Control System.
 
 Tkinter is used for GUI.
@@ -7,6 +7,7 @@ Tkinter is used for GUI.
 """
 
 import datetime
+import os
 import time
 import Tkinter as tk
 import sys
@@ -30,13 +31,14 @@ class Tango(object):
     """
     def __init__(self):
         self._db = PyTango.Database()
-        # Hard coded. Need a better way to obtain the door name.
         # TODO: search in the door database.
+        # Hard coded. Need a better way to obtain the door name.
         door_name = "cfeld/door/cfeld-pcx27083.01"
         if not self.is_door(door_name):
             print "Error: invalid door name %s." % door_name
             sys.exit(1)
-        door_full_name = "%s:%s/%s" % (self._db.get_db_host(), self._db.get_db_port(), door_name)
+        door_full_name = "%s:%s/%s" % \
+                (self._db.get_db_host(), self._db.get_db_port(), door_name)
         # Sardana door.
         self.door = BaseDoor(door_full_name)
         # Debug, Output stream of door log.
@@ -133,7 +135,8 @@ class Application(tk.Frame):
         """Add device entry.
 
         Triggered by |add_device_btn|. Maintain lists |devices| and
-        |added_devices|, menus |device_menu| and |scannable_device_menu| as well.
+        |added_devices|, menus |device_menu| and |scannable_device_menu| as
+        well.
 
         """
         device_name = self.selected_device.get()
@@ -141,6 +144,7 @@ class Application(tk.Frame):
         if device_name == "-":
             return
         device_class = self.tango.get_device_class(device_name)
+        # Create device instance.
         device = getattr(widget, device_class + "Device") \
                 (self, self.device_workspace_frame, device_name)
         device.grid(row=0, column=len(self.device_workspace_frame.children),
@@ -191,10 +195,6 @@ class Application(tk.Frame):
         self.master.rowconfigure(0, weight=1)
         self.master.columnconfigure(0, weight=1)
         self.grid(row=0, column=0, sticky=(N, S, E, W))
-
-        # Make all widgets focusable in order to remove focus from widget, like
-        # entry, when clicking elsewhere.
-        self.bind_all("<1>", lambda event: event.widget.focus_set())
 
     def _create_widgets(self):
         """Create and configure all widgets."""
@@ -337,8 +337,8 @@ class Application(tk.Frame):
         """Start scanning.
 
         Contains folloing steps:
-            1. Get entry to be scanned. Return if none (warning).
-            2. Get scanning start, end and step value. Return if illegal. (error)
+            1. Get entry to be scanned. Return if none.
+            2. Get scanning start, end and step value. Return if illegal.
             3. Disable all widgets to prevent value change during scanning.
             4. Set value of attributes for all related devices (device with
                |is_always_log| set to True or device to be scanned.)
@@ -355,9 +355,9 @@ class Application(tk.Frame):
         start = is_number(scan_entry.start_entry.get())
         end = is_number(scan_entry.end_entry.get())
         step = is_number(scan_entry.step_entry.get())
-        if not start or not end or not step:
+        if start is None or end is None or step is None:
             print "Error: illegal start, end or step value of %s::%s." \
-                    % scan_entry.device, scan_entry.attr
+                    % (scan_entry.device, scan_entry.attr)
             return
 
         self.change_state(self, False)
@@ -366,9 +366,9 @@ class Application(tk.Frame):
         logging_devices = []
         # Set value for device attributes.
         for device in self.device_workspace_frame.children.values():
-            if device.is_always_log or device.device_name == scan_entry.name:
+            if device.is_always_log or device.device_name == scan_entry.device:
                 print "Debug: set value for device %s." % device.device_name
-                if device.device_name == scan_entry.name:
+                if device.device_name == scan_entry.device:
                     # Put scanning device at the front of |logging_devices|.
                     logging_devices.insert(0, device)
                 else:
@@ -376,26 +376,32 @@ class Application(tk.Frame):
                 all_attr = device.common_attr + device.other_attr
                 for attr in all_attr:
                     val = is_number(attr.value_widget.get())
-                    if not val:
+                    if val is None:
                         print "Error: invalid value of %s::%s." \
-                                % device.device_name, attr.name
-                        continue
-                    device.set_attribute(attr, val)
+                                % (device.device_name, attr.name)
+                    if not device.set_attribute(attr.name, val):
+                        print "Error: failed to set attribute %s::%s." \
+                                % (device.device_name, attr.name)
 
-        file_name = datetime.datetime.now().strftime("%x_%X") + ".log"
-        out_file = open(self.log_path + file_name, "w")
+        scan_id = datetime.datetime.now().strftime("%d%m%Y_%H%M%S")
+        file_name = scan_id + ".log"
+        folder_path = self.log_path + scan_id + "/"
+        os.mkdir(folder_path)
+        out_file = open(folder_path + file_name, "w")
         value = start
-        while value < end:
+        while value <= end:
+            if not logging_devices[0].set_attribute(scan_entry.attr, value):
+                print "Error: failed to scan attribute %s::%s." \
+                        % (scan_entry.device, scan_entry.attr)
+                break
             for device in logging_devices:
                 device.log(out_file)
-            logging_devices[0].set_attribute(scan_entry.attr, value)
             value += step
         out_file.close()
+        self._stop_scan()
 
     def _stop_scan(self):
         """Stop scanning."""
-        print "Warning: something bad happens if abort."
-        # TODO.
         self.change_state(self, True)
         for entry in self.scan_workspace_frame.children.values():
             entry.update_state()
