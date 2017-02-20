@@ -1,3 +1,6 @@
+# Log
+log/
+
 # Experiment images
 *.raw
 *.edf
