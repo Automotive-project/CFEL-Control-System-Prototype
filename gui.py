@@ -6,6 +6,7 @@ Tkinter is used for GUI.
 
 """
 
+import datetime
 import time
 import Tkinter as tk
 import sys
@@ -122,7 +123,7 @@ class Application(tk.Frame):
         self.added_devices = []
 
         # Where log files are placed.
-        self.log_path = "/home/ax01user/test/log"
+        self.log_path = "/home/ax01user/test/log/"
 
         # Render the layout.
         self._configure_master()
@@ -333,7 +334,15 @@ class Application(tk.Frame):
                 entry.destroy()
 
     def _start_scan(self):
-        """Start scanning."""
+        """Start scanning.
+
+        Contains folloing steps:
+            1. Get entry to be scanned. Return if none (warning).
+            2. Get scanning start, end and step value. Return if illegal. (error)
+            3. Disable all widgets to prevent value change during scanning.
+            4. Set value of attributes for all related devices (device with
+               |is_always_log| set to True or device to be scanned.)
+        """
         scan_entry = None
         for entry in self.scan_workspace_frame.children.values():
             if entry.enabled.get() == 1:
@@ -347,20 +356,41 @@ class Application(tk.Frame):
         end = is_number(scan_entry.end_entry.get())
         step = is_number(scan_entry.step_entry.get())
         if not start or not end or not step:
-            print "Error: invalid start, end or step value."
+            print "Error: illegal start, end or step value of %s::%s." \
+                    % scan_entry.device, scan_entry.attr
+            return
 
         self.change_state(self, False)
         self.change_state(self.scan_stop_btn, True)
 
+        logging_devices = []
+        # Set value for device attributes.
         for device in self.device_workspace_frame.children.values():
-            if device.is_always_recording:
+            if device.is_always_log or device.device_name == scan_entry.name:
+                print "Debug: set value for device %s." % device.device_name
+                if device.device_name == scan_entry.name:
+                    # Put scanning device at the front of |logging_devices|.
+                    logging_devices.insert(0, device)
+                else:
+                    logging_devices.append(device)
+                all_attr = device.common_attr + device.other_attr
+                for attr in all_attr:
+                    val = is_number(attr.value_widget.get())
+                    if not val:
+                        print "Error: invalid value of %s::%s." \
+                                % device.device_name, attr.name
+                        continue
+                    device.set_attribute(attr, val)
 
-
-
+        file_name = datetime.datetime.now().strftime("%x_%X") + ".log"
+        out_file = open(self.log_path + file_name, "w")
         value = start
         while value < end:
-            device.set_attr(scan_entry.attr, value)
+            for device in logging_devices:
+                device.log(out_file)
+            logging_devices[0].set_attribute(scan_entry.attr, value)
             value += step
+        out_file.close()
 
     def _stop_scan(self):
         """Stop scanning."""

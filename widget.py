@@ -70,7 +70,7 @@ class DeviceBase(tk.Frame):
         self.device_type = "DeviceBase"
         self.device_name = name
         self.tango_device = PyTango.DeviceProxy(name)
-        self.is_always_recording = False
+        self.is_always_log = False
         self.common_attr = []
         # FIX: Is |common_attr| == scannable_attr?
         self.scannable_attr = self.common_attr
@@ -175,7 +175,17 @@ class DeviceBase(tk.Frame):
         """
         out.write("%s::%s::DefaultLog\n" % self.device_type, self.device_name)
 
-    def set_attr(self, attr, val):
+    def get_attribute(self, attr):
+        """Get attribute value. Should take care of all attributes in
+        |common_attr|, |scannable_attr| and |other_attr|.
+
+        Args:
+            attr(str): attribute.
+
+        """
+        pass
+
+    def set_attribute(self, attr, val):
         """Set attribute value. Should take care of all attributes in
         |common_attr|, |scannable_attr| and |other_attr|.
 
@@ -202,7 +212,7 @@ class LimaCCDsDevice(DeviceBase):
 
         self.device_type = "LimaCCDs"
         self.device_name = name
-        self.is_always_recording = True
+        self.is_always_log = True
         self.common_attr = [Attribute("Exposure Time", tk.Entry)]
         self.other_attr = [Attribute("Number of frames", tk.Entry)]
 
@@ -241,7 +251,23 @@ class LimaCCDsDevice(DeviceBase):
             content += "%s::%s::ImageFile%d = %s\n" % self.device_type, self.device_name, image_idx, image_file_name
         out.write(content)
 
-    def set_attr(self, attr, val):
+    def get_attribute(self, attr):
+        """Get attribute value. Should take care of all attributes in
+        |common_attr|, |scannable_attr| and |other_attr|.
+
+        Args:
+            attr(str): attribute.
+
+        """
+        if attr == "Exposure Time":
+            return self._get_attribute("acq_expo_time")
+        elif attr == "Number of frames":
+            return self._get_attribute("acq_nb_frames")
+        else:
+            print "Error: unknown attribute %s." % attr
+            return None
+
+    def set_attribute(self, attr, val):
         """Set attribute value. Should take care of all attributes in
         |common_attr|, |scannable_attr| and |other_attr|.
 
@@ -277,7 +303,7 @@ class MotorDevice(DeviceBase):
 
         self.device_type = "Motor"
         self.device_name = name
-        self.is_always_recording = False
+        self.is_always_log = False
         self.common_attr = [Attribute("Position", tk.Entry)]
         self.other_attr = [Attribute("Step per unit", tk.Entry)]
 
@@ -298,7 +324,23 @@ class MotorDevice(DeviceBase):
         content = "%s::%s::Position = %s\n" % self.device_type, self.device_name, str(pos)
         out.write(content)
 
-    def set_attr(self, attr, val):
+    def get_attribute(self, attr):
+        """Get attribute value. Should take care of all attributes in
+        |common_attr|, |scannable_attr| and |other_attr|.
+
+        Args:
+            attr(str): attribute.
+
+        """
+        if attr == "Position":
+            return self._get_attribute("position")
+        elif attr == "Step per unit":
+            return self._get_attribute("step_per_unit")
+        else:
+            print "Error: unknown attribute %s." % attr
+            return None
+
+    def set_attribute(self, attr, val):
         """Set attribute value. Should take care of all attributes in
         |common_attr|, |scannable_attr| and |other_attr|.
 
