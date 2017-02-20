@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# pylint: disable=attribute-defined-outside-init, fixme, line-too-long, redefined-outer-name, star-args, too-few-public-methods, too-many-branches, too-many-instance-attributes, too-many-locals, too-many-public-methods, unused-argument, unused-variable
+# pylint: disable=attribute-defined-outside-init, bad-continuation, fixme, line-too-long, no-self-use, redefined-outer-name, star-args, too-few-public-methods, too-many-branches, too-many-instance-attributes, too-many-locals, too-many-public-methods, unused-argument, unused-variable
 """This module is the main GUI for Control System.
 
 Tkinter is used for GUI.
@@ -10,6 +10,7 @@ import datetime
 import os
 import time
 import Tkinter as tk
+import tkMessageBox
 import sys
 from collections import deque
 from Tkinter import N, S, E, W
@@ -26,17 +27,19 @@ class Tango(object):
     Attributes:
         _db: instance of Tango database.
         door: instance of Sardana door.
-        TODO
+        debug: debug-level log stream of Sardana.
+        output: output-level log stream of Sardana.
+        device_classes (list of str): supported device classes.
+        devices (str): all devices found under classes |device_classes|.
 
     """
     def __init__(self):
         self._db = PyTango.Database()
-        # TODO: search in the door database.
-        # Hard coded. Need a better way to obtain the door name.
-        door_name = "cfeld/door/cfeld-pcx27083.01"
-        if not self.is_door(door_name):
-            print "Error: invalid door name %s." % door_name
+        door_name = self.find_door()
+        if not door_name:
+            tkMessageBox.showerror("Error", "No Sardana door found.")
             sys.exit(1)
+        print door_name
         door_full_name = "%s:%s/%s" % \
                 (self._db.get_db_host(), self._db.get_db_port(), door_name)
         # Sardana door.
@@ -62,24 +65,20 @@ class Tango(object):
         """Return True if sardana is at state ON instead of RUNNING, OFF."""
         return self.door.getState() == PyTango.DevState.RUNNING
 
-    def is_door(self, door_name):
-        """Return True if |door_name| is a valid Sardana door.
+    def find_door(self):
+        """Return door name. Return None if not found.
 
-        Args:
-            door_name (str): full name of the door, eg. cfeld/door/door.01.
+        Find door under server pattern MacroServer*.
 
         """
         server_list = self._db.get_server_list('MacroServer/*').value_string
         for server in server_list:
             server_devs = self._db.get_device_class_list(server).value_string
             devs, classes = server_devs[0::2], server_devs[1::2]
-            for idx, dev in enumerate(devs):
-                if dev.lower() == door_name.lower():
-                    if classes[idx] == "Door":
-                        return True
-                    else:
-                        return False
-        return False
+            for idx, class_ in enumerate(classes):
+                if class_.lower() == "door":
+                    return devs[idx]
+        return None
 
     def run_macro(self, command):
         """Run macro on Sardana.
@@ -208,8 +207,6 @@ class Application(tk.Frame):
         self.setting_menu.add_command(label="Quit", command=self.quit)
         self.menubar.add_cascade(label="Setting", menu=self.setting_menu)
         self.help_menu = tk.Menu(self.menubar, tearoff=0)
-        self.help_menu.add_command(label="Tutorial",
-                                   command=self._open_tutorial)
         self.help_menu.add_command(label="About", command=self._open_about)
         self.menubar.add_cascade(label="Help", menu=self.help_menu)
 
@@ -301,18 +298,12 @@ class Application(tk.Frame):
 
     def _open_about(self):
         """Open about menu."""
-        # TODO.
-        about_win = tk.Toplevel(self.master)
+        tkMessageBox.showinfo("About", "Tango Control System v0.1\n Author: Juang, Yi-Lin")
 
     def _open_log_setting(self):
         """Open log setting menu."""
         # TODO.
         log_setting_win = tk.Toplevel(self.master)
-
-    def _open_tutorial(self):
-        """Open tutorial menu."""
-        # TODO.
-        tutorial_win = tk.Toplevel(self.master)
 
     def remove_device(self, device):
         """Remove device entry.
@@ -349,15 +340,16 @@ class Application(tk.Frame):
                 scan_entry = entry
                 break
         if not scan_entry:
-            print "Warning: not attributes to be scanned."
+            tkMessageBox.showwarning("Warning", "No attributes to be scanned.")
             return
 
         start = is_number(scan_entry.start_entry.get())
         end = is_number(scan_entry.end_entry.get())
         step = is_number(scan_entry.step_entry.get())
         if start is None or end is None or step is None:
-            print "Error: illegal start, end or step value of %s::%s." \
-                    % (scan_entry.device, scan_entry.attr)
+            tkMessageBox.showerror("Error",
+                    "Illegal start, end or step value of %s::%s." \
+                    % (scan_entry.device, scan_entry.attr))
             return
 
         self.change_state(self, False)
@@ -377,11 +369,13 @@ class Application(tk.Frame):
                 for attr in all_attr:
                     val = is_number(attr.value_widget.get())
                     if val is None:
-                        print "Error: invalid value of %s::%s." \
-                                % (device.device_name, attr.name)
+                        tkMessageBox.showerror("Error",
+                                "Invalid value of %s::%s." \
+                                % (device.device_name, attr.name))
                     if not device.set_attribute(attr.name, val):
-                        print "Error: failed to set attribute %s::%s." \
-                                % (device.device_name, attr.name)
+                        tkMessageBox.showerror("Error",
+                                "Failed to set attribute %s::%s." \
+                                % (device.device_name, attr.name))
 
         scan_id = datetime.datetime.now().strftime("%d%m%Y_%H%M%S")
         file_name = scan_id + ".log"
@@ -391,8 +385,9 @@ class Application(tk.Frame):
         value = start
         while value <= end:
             if not logging_devices[0].set_attribute(scan_entry.attr, value):
-                print "Error: failed to scan attribute %s::%s." \
-                        % (scan_entry.device, scan_entry.attr)
+                tkMessageBox.showerror("Error",
+                        "Failed to scan attribute %s::%s." \
+                        % (scan_entry.device, scan_entry.attr))
                 break
             for device in logging_devices:
                 device.log(out_file)

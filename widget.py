@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# pylint: disable=attribute-defined-outside-init, fixme, no-self-use, too-few-public-methods, too-many-ancestors, too-many-instance-attributes, too-many-public-methods, unused-variable
+# pylint: disable=attribute-defined-outside-init, bad-continuation, fixme, no-self-use, too-few-public-methods, too-many-ancestors, too-many-instance-attributes, too-many-public-methods, unused-variable
 """This module contains custom widgets for Control System GUI.
 
 Tkinter is used for GUI.
@@ -9,6 +9,7 @@ Tkinter is used for GUI.
 import os
 import time
 import Tkinter as tk
+import tkMessageBox
 from Tkinter import N, S, E, W
 
 import PyTango
@@ -300,7 +301,9 @@ class LimaCCDsDevice(DeviceBase):
         if attr == "Exposure Time":
             min_et, max_et = self._get_attribute("valid_ranges")[:2]
             if val < min_et or val > max_et:
-                print "Error: illegal exposure time %s." % val
+                tkMessageBox.showerror("Error",
+                        "Illegal exposure time %s." % val)
+                tkMessageBox.showerror("Error", )
                 return False
             self._set_attribute("acq_expo_time", val)
         elif attr == "Number of frames":
